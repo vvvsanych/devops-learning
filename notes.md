@@ -6,4 +6,4 @@
 - Git configured
 - PyCharm Professional ready
 
-Date: [29.08.2025]
+Date: [28.08.2025]
