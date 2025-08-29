@@ -22,7 +22,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up QEMU (optional, for multi-arch)
+      - name: Set up QEMU (optional)
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
@@ -60,14 +60,15 @@ jobs:
           sbom: true
           provenance: true
 
-      - name: Trivy scan (HIGH/CRITICAL only)
+      - name: Trivy scan (CRITICAL/HIGH)
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
           format: table
           vuln-type: os,library
           severity: CRITICAL,HIGH
-          exit-code: '0'   # поки лише звітуємо, не падаємо
+          exit-code: '0'  # навчання: не валимо збірку поки що
 
       - name: Show digest
-        run: echo "Image digest: ${{ steps.build.outputs.digest }}"
+        run: |
+          echo "Image digest: ${{ steps.build.outputs.digest }}"

@@ -1,0 +1,56 @@
+name: CD - Deploy to VM
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Copy compose file to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          port: ${{ secrets.PROD_PORT }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          source: "phase1/compose-basics/docker-compose.prod.yml"
+          target: "~/apps/compose-basics"
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          OWNER: ${{ github.vvvsanych }}
+          VERSION: latest
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          port: ${{ secrets.PROD_PORT }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            mkdir -p ~/apps/compose-basics
+            cd ~/apps/compose-basics
+
+            # Якщо пакет приватний — логін у GHCR
+            if [ -n "${GHCR_PAT:-}" ]; then
+              echo "${GHCR_PAT}" | docker login ghcr.io -u "${OWNER}" --password-stdin
+            fi
+
+            # Підставляємо OWNER та VERSION як змінні середовища для compose
+            export OWNER="$OWNER"
+            export VERSION="$VERSION"
+
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker compose -f docker-compose.prod.yml ps
