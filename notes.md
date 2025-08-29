@@ -5,5 +5,8 @@
 - Docker Desktop working
 - Git configured
 - PyCharm Professional ready
+- ## Phase 1.2: Git Setup ✅
+- Repository created: https://github.com/vvvsanych/devops-learning
+- Folder structure added
 
-Date: [28.08.2025]
+Date: [29.08.2025]
