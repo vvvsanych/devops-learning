@@ -7,13 +7,12 @@ on:
 
 permissions:
   contents: read
-  packages: write        # дозволяє пушити в GHCR
-  id-token: write        # для provenance/SLSA підписів (опційно)
+  packages: write
+  id-token: write
 
 env:
   IMAGE_NAME: compose-basics-app
   REGISTRY: ghcr.io
-  # owner = користувач або організація, під якою репозиторій
   OWNER: ${{ github.repository_owner }}
 
 jobs:
@@ -23,7 +22,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up QEMU (multi-arch, опційно)
+      - name: Set up QEMU (optional, for multi-arch)
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
@@ -36,13 +35,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Генеруємо теги/мітки: latest для main; короткий sha завжди
-      - name: Docker meta
+      - name: Docker meta (prepare tags & labels)
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=sha-${{ github.sha }}
             type=raw,enable={{is_default_branch}},value=latest
@@ -63,17 +60,14 @@ jobs:
           sbom: true
           provenance: true
 
-      # Скануємо образ (HIGH/CRITICAL — фокус)
-      - name: Trivy scan
+      - name: Trivy scan (HIGH/CRITICAL only)
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
-          format: 'table'
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '0'   # не валимо збірку на перших порах; потім зробимо '1'
+          format: table
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          exit-code: '0'   # поки лише звітуємо, не падаємо
 
       - name: Show digest
-        run:
-          echo "Image digest: ${{ steps.build.outputs.digest }}"
-
+        run: echo "Image digest: ${{ steps.build.outputs.digest }}"
