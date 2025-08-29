@@ -1,0 +1,79 @@
+name: CI - Build & Push to GHCR
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+
+permissions:
+  contents: read
+  packages: write        # дозволяє пушити в GHCR
+  id-token: write        # для provenance/SLSA підписів (опційно)
+
+env:
+  IMAGE_NAME: compose-basics-app
+  REGISTRY: ghcr.io
+  # owner = користувач або організація, під якою репозиторій
+  OWNER: ${{ github.repository_owner }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU (multi-arch, опційно)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Генеруємо теги/мітки: latest для main; короткий sha завжди
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=sha-${{ github.sha }}
+            type=raw,enable={{is_default_branch}},value=latest
+          labels: |
+            org.opencontainers.image.source=${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Build and push (with SBOM & provenance)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./phase1/compose-basics/app
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          sbom: true
+          provenance: true
+
+      # Скануємо образ (HIGH/CRITICAL — фокус)
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          format: 'table'
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'   # не валимо збірку на перших порах; потім зробимо '1'
+
+      - name: Show digest
+        run:
+          echo "Image digest: ${{ steps.build.outputs.digest }}"
+
