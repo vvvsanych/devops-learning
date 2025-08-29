@@ -1,0 +1,12 @@
+# Ігноруємо непотрібні файли під час побудови образу
+*.pyc
+__pycache__/
+.git/
+.gitignore
+README.md
+.env
+.venv/
+venv/
+.pytest_cache/
+.coverage
+*.log
