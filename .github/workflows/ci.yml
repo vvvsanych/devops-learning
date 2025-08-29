@@ -3,29 +3,24 @@ name: CI - Build & Push to GHCR
 on:
   push:
     branches: [ "main" ]
-  pull_request:
+  pull_request: {}
 
 permissions:
   contents: read
   packages: write
-  id-token: write
 
 env:
-  IMAGE_NAME: compose-basics-app
   REGISTRY: ghcr.io
-  OWNER: ${{ github.repository_owner }}
+  IMAGE_NAME: compose-basics-app
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up QEMU (optional)
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
+      - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
@@ -35,40 +30,41 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Docker meta (prepare tags & labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=sha-${{ github.sha }}
-            type=raw,enable={{is_default_branch}},value=latest
-          labels: |
-            org.opencontainers.image.source=${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+      - name: Compute image name and tags (lowercase owner)
+        id: vars
+        run: |
+          OWNER_RAW='${{ github.vvvsanych }}'
+          OWNER_LC=$(echo "$OWNER_RAW" | tr '[:upper:]' '[:lower:]')
+          echo "OWNER_LC=$OWNER_LC" >> $GITHUB_ENV
+
+          IMAGE="${{ env.REGISTRY }}/${OWNER_LC}/${{ env.IMAGE_NAME }}"
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+          TAGS="$IMAGE:sha-${{ github.sha }}"
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            TAGS="$TAGS,$IMAGE:latest"
+          fi
+          echo "TAGS=$TAGS" >> $GITHUB_ENV
 
       - name: Build and push (with SBOM & provenance)
-        id: build
         uses: docker/build-push-action@v6
         with:
           context: ./phase1/compose-basics/app
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ env.TAGS }}
           sbom: true
           provenance: true
 
-      - name: Trivy scan (CRITICAL/HIGH)
+      - name: Trivy scan (CRITICAL/HIGH, не валимо збірку)
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          image-ref: ${{ env.IMAGE }}:sha-${{ github.sha }}
           format: table
           vuln-type: os,library
           severity: CRITICAL,HIGH
-          exit-code: '0'  # навчання: не валимо збірку поки що
+          exit-code: '0'
 
-      - name: Show digest
+      - name: Show image and tags
         run: |
-          echo "Image digest: ${{ steps.build.outputs.digest }}"
+          echo "IMAGE: ${{ env.IMAGE }}"
+          echo "TAGS:  ${{ env.TAGS }}"
